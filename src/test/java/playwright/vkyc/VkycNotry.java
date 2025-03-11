@@ -63,8 +63,8 @@ public class VkycNotry {
         try (Connection callingConn = DatabaseConnection.getCallingDBConnection()) {
             assertNotNull(callingConn, "Failed to establish connection to CallingInfra DB");
 
-            // Verify vendor_lead_details entry in CallingInfra DB
-            assertTrue(verifyVendorLeadDetailsEntry(callingConn, loanAppId), "API did not create expected entry in vendor_lead_details");
+            // Verify vendor_lead_details entry in CallingInfra DB with retry logic
+            assertTrue(waitForVendorLeadEntry(callingConn, loanAppId), "API did not create expected entry in vendor_lead_details within the timeout");
         } catch (Exception e) {
             Logger.logError("Exception while connecting to CallingInfra DB: " + e.getMessage());
             throw e;
@@ -152,18 +152,42 @@ public class VkycNotry {
         return false;
     }
 
-    private boolean verifyVendorLeadDetailsEntry(Connection conn, String loanAppId) throws Exception {
-        try (PreparedStatement stmt = conn.prepareStatement(Queries.VERIFY_VENDOR_LEAD_DETAILS_QUERY)) {
-            stmt.setString(1, loanAppId);
-            ResultSet rs = stmt.executeQuery();
-            if (rs.next()) {
-                String entityId = rs.getString("entity_id");
-                String campaignId = rs.getString("campaign_id");
+    private boolean waitForVendorLeadEntry(Connection conn, String loanAppId) throws Exception {
+        int initialWaitTime = 240; // 4 minutes (240 seconds)
+        int retryInterval = 10; // Retry every 10 seconds
+        int elapsedTime = 0;
 
-                Logger.logInfo(String.format("Entry Found in vendor_lead_details - entity_id: %s, campaign_id: %s", entityId, campaignId));
-                return "VKYC_NOTRY".equals(campaignId);
+        Logger.logInfo("⏳ Waiting for " + initialWaitTime + " seconds before checking vendor_lead_details...");
+        Thread.sleep(initialWaitTime * 1000); // Initial wait of 4 minutes
+        elapsedTime += initialWaitTime;
+
+        while (elapsedTime <= 420) {
+            try (PreparedStatement stmt = conn.prepareStatement(Queries.VERIFY_VENDOR_LEAD_DETAILS_QUERY)) {
+                stmt.setString(1, loanAppId);
+                ResultSet rs = stmt.executeQuery();
+
+                if (rs.next()) {
+                    String entityId = rs.getString("entity_id");
+                    String campaignId = rs.getString("campaign_id");
+                    String dateCreated = rs.getString("date_created");
+
+                    Logger.logInfo(String.format("✅ Entry Found in vendor_lead_details - entity_id: %s, campaign_id: %s, date_created: %s",
+                            entityId, campaignId, dateCreated));
+
+                    return "VKYC_NOTRY".equals(campaignId); // Ensure correct campaign_id
+                }
             }
+
+            if (elapsedTime >= 420) {
+                break; // Avoid unnecessary last retry
+            }
+
+            Logger.logInfo(String.format("⏳ Entry not found in vendor_lead_details, retrying in %d seconds...", retryInterval));
+            Thread.sleep(retryInterval * 1000);
+            elapsedTime += retryInterval;
         }
+
+        Logger.logError("❌ Timeout reached! Entry not found in vendor_lead_details within " + 420 + " seconds.");
         return false;
     }
 }

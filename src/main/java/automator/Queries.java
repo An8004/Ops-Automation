@@ -8,6 +8,6 @@ public class Queries {
     public static final String VERIFY_CALLING_SERVICE_LEADS_QUERY = "SELECT entity_id, campaign_id FROM calling_service_leads WHERE entity_id = (SELECT loan_application_no FROM loan_application WHERE id = ? ) AND campaign_id = 'VKYC_NOTRY'";
     //public static final String VERIFY_VENDOR_LEAD_DETAILS_QUERY = "SELECT entity_id, campaign_id FROM vendor_lead_details WHERE entity_id = (SELECT loan_application_no FROM loan_application WHERE id = ? ) AND campaign_id = 'VKYC_NOTRY'";
     public static final String VERIFY_VENDOR_LEAD_DETAILS_QUERY =
-            "SELECT entity_id, campaign_id FROM vendor_lead_details WHERE entity_id = ?";
+            "SELECT entity_id, campaign_id FROM vendor_lead_details WHERE entity_id = ?"; // This is the code that follows your completed code           "SELECT entity_id, campaign_id FROM vendor_lead_details WHERE entity_id = ?";
 
 }
