@@ -82,4 +82,8 @@ public class ConfigManager {
 
     public static void loadProperties() {
     }
+
+    public static String getEntityID() {
+        return properties.getProperty("entity_id");
+    }
 }
