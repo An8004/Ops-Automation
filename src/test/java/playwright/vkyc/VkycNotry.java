@@ -46,7 +46,7 @@ public class VkycNotry {
 
             // Step 1: Verify application status
             assertEquals("REQ_CREDIT_CHECK", validateApplicationStatus(lendingConn, loanAppId), "Invalid application status");
-            loanAppNo= getLoanAppNo(lendingConn,loanAppId);
+            loanAppNo = getLoanAppNo(lendingConn, loanAppId);
 
             // Step 2: Update vkyc_info entry
             assertTrue(updateVkycInfo(lendingConn, loanAppId, formattedDate), "Failed to update date_created in vkyc_info");
@@ -69,7 +69,7 @@ public class VkycNotry {
         // **Step 7: Vendor Lead Details Verification in Calling DB**
         try (Connection callingConn = DatabaseConnection.getCallingDBConnection()) {
             assertNotNull(callingConn, "Failed to establish connection to Calling DB");
-            assertTrue(verifyVendorLeadDetails(callingConn,loanAppNo), "vendor_lead_details validation failed");
+            assertTrue(verifyVendorLeadDetails(callingConn, loanAppNo), "vendor_lead_details validation failed");
         }
     }
 
@@ -166,18 +166,26 @@ public class VkycNotry {
             if (rs.next()) {
                 String entityId = rs.getString("entity_id");
                 String campaignId = rs.getString("campaign_id");
+                String status = rs.getString("status");
 
-                Logger.logInfo(String.format("Entry Created in calling_service_leads - entity_id: %s, campaign_id: %s", entityId, campaignId));
-                return "VKYC_NOTRY".equals(campaignId);
+                Logger.logInfo(String.format("Entry Created in calling_service_leads - entity_id: %s, campaign_id: %s, status: %s",
+                        entityId, campaignId, status));
+
+                return "VKYC_NOTRY".equals(campaignId) && "ADDED".equals(status);
             }
         }
         return false;
     }
 
     private boolean verifyVendorLeadDetails(Connection conn, String loanAppNo) throws Exception {
+        if (loanAppNo == null || loanAppNo.isEmpty()) {
+            Logger.logError("Invalid loanAppNo: " + loanAppNo);
+            return false;
+        }
+
         boolean isRecordPresent = false;
         int maxRetries = 20;  // Maximum retries
-        int waitTime = 15000; // 30 seconds wait time
+        int waitTime = 15000; // 15 seconds wait time
 
         ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
         Callable<Boolean> task = () -> {
@@ -187,9 +195,12 @@ public class VkycNotry {
                 if (rs.next()) {
                     String entityId = rs.getString("entity_id");
                     String campaignId = rs.getString("campaign_id");
+                    String status = rs.getString("status");
 
-                    Logger.logInfo(String.format("Entry Created in vendor_lead_details - entity_id: %s, campaign_id: %s", entityId, campaignId));
-                    return (entityId != null && campaignId != null);
+                    Logger.logInfo(String.format("Entry Created in vendor_lead_details - entity_id: %s, campaign_id: %s, status: %s",
+                            entityId, campaignId, status));
+
+                    return (entityId != null && campaignId != null && "READY_TO_ADD".equals(status));
                 }
             }
             return false;
