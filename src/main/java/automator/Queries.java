@@ -1,6 +1,7 @@
 package automator;
 
 public class Queries {
+    public static final String LOAN_APP_NO = "SELECT loan_application_no FROM loan_application WHERE id = ?";
     public static final String REVIEW_STATUS_QUERY = "SELECT user_data_review_status FROM loan_application WHERE id = ?";
     public static final String UPDATE_VKYC_INFO_QUERY = "UPDATE vkyc_info SET date_created = ? WHERE unique_id_ref = ?";
     public static final String FETCH_VKYC_INFO_QUERY = "SELECT status, provider, flow_type, attempts FROM vkyc_info WHERE unique_id_ref = ?";

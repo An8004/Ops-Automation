@@ -1,5 +1,10 @@
 package playwright.vkyc;
 
+import java.util.concurrent.Callable;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import automator.ConfigManager;
 import automator.DatabaseConnection;
 import automator.Logger;
@@ -23,7 +28,6 @@ public class VkycNotry {
     public void testVkycNotryFlow() throws Exception {
         DatabaseConnection.connectToDatabases();
         String loanAppId = ConfigManager.getLoanAppID();
-        String entityId = ConfigManager.getEntityID();
         assertNotNull(loanAppId, "loan_app_ID is missing in config.properties");
 
         String environment = ConfigManager.getEnvironment();
@@ -34,6 +38,7 @@ public class VkycNotry {
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
         LocalDateTime expectedTime = LocalDateTime.now().minusMinutes(60);
         String formattedDate = expectedTime.format(formatter);
+        String loanAppNo;
 
         // **Step 1-7: Lending DB Operations**
         try (Connection lendingConn = DatabaseConnection.getLendingDBConnection()) {
@@ -41,6 +46,7 @@ public class VkycNotry {
 
             // Step 1: Verify application status
             assertEquals("REQ_CREDIT_CHECK", validateApplicationStatus(lendingConn, loanAppId), "Invalid application status");
+            loanAppNo= getLoanAppNo(lendingConn,loanAppId);
 
             // Step 2: Update vkyc_info entry
             assertTrue(updateVkycInfo(lendingConn, loanAppId, formattedDate), "Failed to update date_created in vkyc_info");
@@ -57,24 +63,44 @@ public class VkycNotry {
             hitVkycApi(apiUrl, loanAppId);
 
             // Step 6: Verify API response entry in calling_service_leads (Lending DB)
-            assertTrue(verifyCallingServiceLeadsEntry(lendingConn, loanAppId,entityId), "API did not create expected entry in calling_service_leads");
+            assertTrue(verifyCallingServiceLeadsEntry(lendingConn, loanAppId), "API did not create expected entry in calling_service_leads");
         }
 
         // **Step 7: Vendor Lead Details Verification in Calling DB**
         try (Connection callingConn = DatabaseConnection.getCallingDBConnection()) {
             assertNotNull(callingConn, "Failed to establish connection to Calling DB");
-            assertTrue(verifyVendorLeadDetails(callingConn, entityId), "vendor_lead_details validation failed");
+            assertTrue(verifyVendorLeadDetails(callingConn,loanAppNo), "vendor_lead_details validation failed");
         }
     }
 
     private String validateApplicationStatus(Connection conn, String loanAppId) throws Exception {
+        if (!isValidLoanAppId(loanAppId)) {
+            throw new IllegalArgumentException("Invalid loan application ID format");
+        }
         try (PreparedStatement stmt = conn.prepareStatement(Queries.REVIEW_STATUS_QUERY)) {
             stmt.setString(1, loanAppId);
             ResultSet rs = stmt.executeQuery();
             if (rs.next()) {
                 String status = rs.getString("user_data_review_status");
-                Logger.logInfo("Application status for LoanAppID " + loanAppId + ": " + status);
+                Logger.logInfo(String.format("Application status for LoanAppID %s: %s", loanAppId, status));
                 return status;
+            }
+        }
+        return null;
+    }
+
+    private boolean isValidLoanAppId(String loanAppId) {
+        return loanAppId != null && loanAppId.matches("[A-Za-z0-9_-]+");
+    }
+
+    private String getLoanAppNo(Connection conn, String loanAppId) throws Exception {
+        try (PreparedStatement stmt = conn.prepareStatement(Queries.LOAN_APP_NO)) {
+            stmt.setString(1, loanAppId);
+            ResultSet rs = stmt.executeQuery();
+            if (rs.next()) {
+                String loanAppNo = rs.getString("loan_application_no");
+                Logger.logInfo(String.format("Loan Application Number for LoanAppID %s: %s", loanAppId, loanAppNo));
+                return loanAppNo;
             }
         }
         return null;
@@ -133,13 +159,12 @@ public class VkycNotry {
         }
     }
 
-    private boolean verifyCallingServiceLeadsEntry(Connection conn, String loanAppId,String entityId1) throws Exception {
+    private boolean verifyCallingServiceLeadsEntry(Connection conn, String loanAppId) throws Exception {
         try (PreparedStatement stmt = conn.prepareStatement(Queries.VERIFY_CALLING_SERVICE_LEADS_QUERY)) {
             stmt.setString(1, loanAppId);
             ResultSet rs = stmt.executeQuery();
             if (rs.next()) {
                 String entityId = rs.getString("entity_id");
-                entityId1 = entityId;
                 String campaignId = rs.getString("campaign_id");
 
                 Logger.logInfo(String.format("Entry Created in calling_service_leads - entity_id: %s, campaign_id: %s", entityId, campaignId));
@@ -149,34 +174,38 @@ public class VkycNotry {
         return false;
     }
 
-    private boolean verifyVendorLeadDetails(Connection conn, String entityId1) throws Exception {
+    private boolean verifyVendorLeadDetails(Connection conn, String loanAppNo) throws Exception {
         boolean isRecordPresent = false;
-        int retryCount = 0;
-        int maxRetries = 10;  // Maximum retries
-        int waitTime = 10000; // 5 seconds wait time
+        int maxRetries = 20;  // Maximum retries
+        int waitTime = 15000; // 30 seconds wait time
 
-        while (retryCount < maxRetries) {
+        ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
+        Callable<Boolean> task = () -> {
             try (PreparedStatement stmt = conn.prepareStatement(Queries.VERIFY_VENDOR_LEAD_DETAILS_QUERY)) {
-                Logger.logInfo("Executing query: " + Queries.VERIFY_VENDOR_LEAD_DETAILS_QUERY + " with entityId = " + entityId1);
-                stmt.setString(1, entityId1);
+                stmt.setString(1, loanAppNo);
                 ResultSet rs = stmt.executeQuery();
                 if (rs.next()) {
                     String entityId = rs.getString("entity_id");
                     String campaignId = rs.getString("campaign_id");
 
-                    Logger.logInfo(String.format("✅ Entry Found in vendor_lead_details - entity_id: %s, campaign_id: %s", entityId, campaignId));
-                    isRecordPresent = (entityId != null && campaignId != null);
-                    break;
+                    Logger.logInfo(String.format("Entry Created in vendor_lead_details - entity_id: %s, campaign_id: %s", entityId, campaignId));
+                    return (entityId != null && campaignId != null);
                 }
             }
+            return false;
+        };
 
-            if (!isRecordPresent) {
-                Logger.logError("[⚠️] Entry not found in vendor_lead_details. Retrying in " + (waitTime / 1000) + " seconds...");
-                Thread.sleep(waitTime);
-                retryCount++;
+        for (int i = 0; i < maxRetries; i++) {
+            Future<Boolean> future = scheduler.schedule(task, waitTime * i, TimeUnit.MILLISECONDS);
+            isRecordPresent = future.get();
+            if (isRecordPresent) {
+                break;
+            } else {
+                Logger.logError("Entry not found in vendor_lead_details. Retrying in " + (waitTime / 1000) + " seconds...");
             }
         }
 
+        scheduler.shutdown();
         return isRecordPresent;
     }
 }
