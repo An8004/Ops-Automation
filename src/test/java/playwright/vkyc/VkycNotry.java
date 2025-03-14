@@ -20,14 +20,14 @@ public class VkycNotry {
     @Test
     public void testVkycNotryFlow() throws Exception {
         DatabaseConnection.connectToDatabases();
+        Logger.logInfo("VKYC NOTRY FLOW STARTED...");
         String loanAppId = ConfigManager.getLoanAppID();
         assertNotNull(loanAppId, "loan_app_ID is missing in config.properties");
-
+        Logger.logInfo("Loan App ID: " + loanAppId);
         String environment = ConfigManager.getEnvironment();
         assertNotNull(environment, "Environment is missing in config.properties");
-
         String apiUrl = "https://" + environment + ".stg.whizdm.com/loans/services/api/vkycCalling/createLeadVkycNoTry";
-
+        Logger.logInfo("API URL: " + apiUrl);
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
         LocalDateTime expectedTime = LocalDateTime.now().minusMinutes(60);
         String formattedDate = expectedTime.format(formatter);
@@ -42,17 +42,19 @@ public class VkycNotry {
                 throw new Exception("Invalid application status for loanAppId: " + loanAppId);
             }
             loanAppNo = getLoanAppNo(lendingConn, loanAppId);
+            Logger.logInfo("Loan Application Number: " + loanAppNo);
 
             // Step 2: Update vkyc_info entry
             if (!updateVkycInfo(lendingConn, loanAppId, formattedDate)) {
                 throw new Exception("Failed to update date_created in vkyc_info for loanAppId: " + loanAppId);
             }
+            Logger.logInfo("Updated vkyc_info entry");
 
             // Step 3: Fetch and validate vkyc_info entry
             if (!validateVkycInfo(lendingConn, loanAppId)) {
                 throw new Exception("vkyc_info validation failed for loanAppId: " + loanAppId);
             }
-
+            Logger.logInfo("Validated vkyc_info entry");
             // Step 4: Check if entry exists in calling_service_leads (Lending DB)
             if (checkExistingEntryInCallingServiceLeads(lendingConn, loanAppId)) {
                 return;
@@ -73,7 +75,9 @@ public class VkycNotry {
             if (!verifyVendorLeadDetails(callingConn, loanAppNo)) {
                 throw new Exception("vendor_lead_details validation failed for loanAppNo: " + loanAppNo);
             }
+            Logger.logInfo("Verified vendor_lead_details entry");
         }
+        Logger.logInfo("VKYC NOTRY FLOW COMPLETED");
     }
 
     private String validateApplicationStatus(Connection conn, String loanAppId) throws Exception {
@@ -85,7 +89,8 @@ public class VkycNotry {
             ResultSet rs = stmt.executeQuery();
             if (rs.next()) {
                 String status = rs.getString("user_data_review_status");
-                Logger.logInfo(String.format("Application status for LoanAppID %s: %s", loanAppId, status));
+                //Logger.logInfo(String.format("Application status for LoanAppID %s: %s", loanAppId, status));
+                Logger.logInfo("Application Status : " + status);
                 return status;
             }
         }
@@ -104,9 +109,7 @@ public class VkycNotry {
             stmt.setString(1, loanAppId);
             ResultSet rs = stmt.executeQuery();
             if (rs.next()) {
-                String loanAppNo = rs.getString("loan_application_no");
-                Logger.logInfo(String.format("Loan Application Number for LoanAppID %s: %s", loanAppId, loanAppNo));
-                return loanAppNo;
+                return rs.getString("loan_application_no");
             }
         }
         return null;
