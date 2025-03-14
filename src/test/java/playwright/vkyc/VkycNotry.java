@@ -1,10 +1,5 @@
 package playwright.vkyc;
 
-import java.util.concurrent.Callable;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 import automator.ConfigManager;
 import automator.DatabaseConnection;
 import automator.Logger;
@@ -13,13 +8,11 @@ import com.microsoft.playwright.APIRequestContext;
 import com.microsoft.playwright.APIResponse;
 import com.microsoft.playwright.Playwright;
 import org.junit.jupiter.api.Test;
-
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-
 import static org.junit.jupiter.api.Assertions.*;
 
 public class VkycNotry {
@@ -45,14 +38,20 @@ public class VkycNotry {
             assertNotNull(lendingConn, "Failed to establish connection to Lending DB");
 
             // Step 1: Verify application status
-            assertEquals("REQ_CREDIT_CHECK", validateApplicationStatus(lendingConn, loanAppId), "Invalid application status");
+            if (!"REQ_CREDIT_CHECK".equals(validateApplicationStatus(lendingConn, loanAppId))) {
+                throw new Exception("Invalid application status for loanAppId: " + loanAppId);
+            }
             loanAppNo = getLoanAppNo(lendingConn, loanAppId);
 
             // Step 2: Update vkyc_info entry
-            assertTrue(updateVkycInfo(lendingConn, loanAppId, formattedDate), "Failed to update date_created in vkyc_info");
+            if (!updateVkycInfo(lendingConn, loanAppId, formattedDate)) {
+                throw new Exception("Failed to update date_created in vkyc_info for loanAppId: " + loanAppId);
+            }
 
             // Step 3: Fetch and validate vkyc_info entry
-            assertTrue(validateVkycInfo(lendingConn, loanAppId), "vkyc_info validation failed");
+            if (!validateVkycInfo(lendingConn, loanAppId)) {
+                throw new Exception("vkyc_info validation failed for loanAppId: " + loanAppId);
+            }
 
             // Step 4: Check if entry exists in calling_service_leads (Lending DB)
             if (checkExistingEntryInCallingServiceLeads(lendingConn, loanAppId)) {
@@ -63,18 +62,22 @@ public class VkycNotry {
             hitVkycApi(apiUrl, loanAppId);
 
             // Step 6: Verify API response entry in calling_service_leads (Lending DB)
-            assertTrue(verifyCallingServiceLeadsEntry(lendingConn, loanAppId), "API did not create expected entry in calling_service_leads");
+            if (!verifyCallingServiceLeadsEntry(lendingConn, loanAppId)) {
+                throw new Exception("API did not create expected entry in calling_service_leads for loanAppId: " + loanAppId);
+            }
         }
 
         // **Step 7: Vendor Lead Details Verification in Calling DB**
         try (Connection callingConn = DatabaseConnection.getCallingDBConnection()) {
             assertNotNull(callingConn, "Failed to establish connection to Calling DB");
-            assertTrue(verifyVendorLeadDetails(callingConn, loanAppNo), "vendor_lead_details validation failed");
+            if (!verifyVendorLeadDetails(callingConn, loanAppNo)) {
+                throw new Exception("vendor_lead_details validation failed for loanAppNo: " + loanAppNo);
+            }
         }
     }
 
     private String validateApplicationStatus(Connection conn, String loanAppId) throws Exception {
-        if (!isValidLoanAppId(loanAppId)) {
+        if (isValidLoanAppId(loanAppId)) {
             throw new IllegalArgumentException("Invalid loan application ID format");
         }
         try (PreparedStatement stmt = conn.prepareStatement(Queries.REVIEW_STATUS_QUERY)) {
@@ -90,10 +93,13 @@ public class VkycNotry {
     }
 
     private boolean isValidLoanAppId(String loanAppId) {
-        return loanAppId != null && loanAppId.matches("[A-Za-z0-9_-]+");
+        return loanAppId == null || !loanAppId.matches("[A-Za-z0-9_-]+");
     }
 
     private String getLoanAppNo(Connection conn, String loanAppId) throws Exception {
+        if (isValidLoanAppId(loanAppId)) {
+            throw new IllegalArgumentException("Invalid loan application ID format");
+        }
         try (PreparedStatement stmt = conn.prepareStatement(Queries.LOAN_APP_NO)) {
             stmt.setString(1, loanAppId);
             ResultSet rs = stmt.executeQuery();
@@ -187,8 +193,7 @@ public class VkycNotry {
         int maxRetries = 20;  // Maximum retries
         int waitTime = 15000; // 15 seconds wait time
 
-        ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
-        Callable<Boolean> task = () -> {
+        for (int i = 0; i < maxRetries; i++) {
             try (PreparedStatement stmt = conn.prepareStatement(Queries.VERIFY_VENDOR_LEAD_DETAILS_QUERY)) {
                 stmt.setString(1, loanAppNo);
                 ResultSet rs = stmt.executeQuery();
@@ -200,23 +205,16 @@ public class VkycNotry {
                     Logger.logInfo(String.format("Entry Created in vendor_lead_details - entity_id: %s, campaign_id: %s, status: %s",
                             entityId, campaignId, status));
 
-                    return (entityId != null && campaignId != null && "READY_TO_ADD".equals(status));
+                    isRecordPresent = (entityId != null && campaignId != null && "READY_TO_ADD".equals(status));
+                    if (isRecordPresent) {
+                        break;
+                    }
                 }
             }
-            return false;
-        };
-
-        for (int i = 0; i < maxRetries; i++) {
-            Future<Boolean> future = scheduler.schedule(task, waitTime * i, TimeUnit.MILLISECONDS);
-            isRecordPresent = future.get();
-            if (isRecordPresent) {
-                break;
-            } else {
-                Logger.logError("Entry not found in vendor_lead_details. Retrying in " + (waitTime / 1000) + " seconds...");
-            }
+            Logger.logError("Entry not found in vendor_lead_details. Retrying in " + (waitTime / 1000) + " seconds...");
+            Thread.sleep(waitTime);
         }
 
-        scheduler.shutdown();
         return isRecordPresent;
     }
 }
