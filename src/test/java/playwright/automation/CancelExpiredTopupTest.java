@@ -1,5 +1,9 @@
 package playwright.automation;
 
+import java.io.IOException;
+import java.sql.PreparedStatement;
+import java.time.format.DateTimeFormatter;
+import java.time.LocalDateTime;
 import automator.DatabaseConnection;
 import automator.Logger;
 import automator.ServerStatusCheck;
@@ -23,24 +27,21 @@ public class CancelExpiredTopupTest {
 
     @BeforeClass
     public void setUp() throws Exception {
-        logInfo("Starting setup...");
+        Logger.logInfo("Starting setup...");
 
         // Connect to databases
         DatabaseConnection.connectToDatabases();
 
         // Perform server status check if not completed
         if (!ServerStatusCheck.isServerCheckCompleted()) {
-            logInfo("Running server status check...");
+            Logger.logInfo("Running server status check...");
             ServerStatusCheck.main(null);
             Assert.assertTrue(ServerStatusCheck.isServerCheckCompleted(),
                     getTimestamp() + " ERROR: Server status check failed!");
         }
 
         // Load properties from configuration file
-        Properties properties = new Properties();
-        try (FileInputStream fis = new FileInputStream("src/main/resources/config.properties")) {
-            properties.load(fis);
-        }
+        Properties properties = loadProperties();
 
         String environment = properties.getProperty("environment");
         String url = properties.getProperty(environment + ".lending");
@@ -58,24 +59,24 @@ public class CancelExpiredTopupTest {
 
     @Test
     public void testCancelExpiredTopup() throws Exception {
-        logInfo("Fetching statuses before cron...");
+        Logger.logInfo("Fetching statuses before cron...");
         List<String> initialStatuses = getStatusesBeforeCron();
 
-        logInfo("Triggering the API call to cancel expired top-ups...");
+        Logger.logInfo("Triggering the API call to cancel expired top-ups...");
         APIResponse response = requestContext.get("/loans/services/api/topup/cron/cancelExpiredTopup");
 
         // Check the response status code and log accordingly
-        logInfo("API Response Status Code: " + response.status());
+        Logger.logInfo("API Response Status Code: " + response.status());
         if (response.status() == 204) {
-            logInfo("API call successful with 204 No Content.");
+            Logger.logInfo("API call successful with 204 No Content.");
         } else if (response.status() == 200) {
-            logInfo("API call successful with 200 OK.");
+            Logger.logInfo("API call successful with 200 OK.");
         } else {
             Assert.fail(getTimestamp() + " ERROR: API call failed! Expected: 200 or 204, Actual: " + response.status());
         }
 
         // Fetch updated statuses after the cron job execution
-        logInfo("Fetching updated statuses after cron...");
+        Logger.logInfo("Fetching updated statuses after cron...");
         List<String> updatedStatuses = getStatusesAfterCron();
 
         // Validate that the application statuses were correctly updated
@@ -83,7 +84,7 @@ public class CancelExpiredTopupTest {
 
         // Fetch and log the count of newly cancelled applications
         int newlyCancelledCount = getNewlyCancelledCountAfterCron();
-        logInfo("Newly system_cancelled app records count: " + newlyCancelledCount);
+        Logger.logInfo("Newly system_cancelled app records count: " + newlyCancelledCount);
     }
 
     private List<String> getStatusesBeforeCron() throws Exception {
@@ -102,8 +103,8 @@ public class CancelExpiredTopupTest {
 
     private List<String> getStatusesFromDatabase(String query) throws Exception {
         List<String> statuses = new ArrayList<>();
-        try (Statement statement = lendingConnection.createStatement();
-             ResultSet resultSet = statement.executeQuery(query)) {
+        try (PreparedStatement preparedStatement = lendingConnection.prepareStatement(query);
+             ResultSet resultSet = preparedStatement.executeQuery()) {
 
             while (resultSet.next()) {
                 statuses.add(resultSet.getString("user_data_review_status"));
@@ -142,13 +143,16 @@ public class CancelExpiredTopupTest {
         }
     }
 
-    private void logInfo(String message) {
-        //ConsoleColor.printWithColor(getTimestamp() + " INFO: " + message);
-        Logger.logInfo("INFO: " + message);
+    private String getTimestamp() {
+        DateTimeFormatter dtf = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss");
+        return "[" + dtf.format(LocalDateTime.now()) + "]";
     }
 
-    private String getTimestamp() {
-        SimpleDateFormat sdf = new SimpleDateFormat("dd/MM/yyyy HH:mm:ss");
-        return "[" + sdf.format(new Date()) + "]";
+    private Properties loadProperties() throws IOException {
+        Properties properties = new Properties();
+        try (FileInputStream fis = new FileInputStream("src/main/resources/config.properties")) {
+            properties.load(fis);
+        }
+        return properties;
     }
 }
