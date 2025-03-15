@@ -5,9 +5,16 @@ import automator.ConfigManager;
 import automator.DatabaseConnection;
 import automator.Logger;
 import automator.Queries;
+import com.aventstack.extentreports.ExtentReports;
+import com.aventstack.extentreports.ExtentTest;
+import com.aventstack.extentreports.Status;
+import com.aventstack.extentreports.reporter.ExtentSparkReporter;
+import com.aventstack.extentreports.reporter.configuration.Theme;
 import com.microsoft.playwright.APIRequestContext;
 import com.microsoft.playwright.APIResponse;
 import com.microsoft.playwright.Playwright;
+import org.testng.annotations.AfterClass;
+import org.testng.annotations.BeforeClass;
 import org.testng.annotations.Test;
 
 import java.sql.Connection;
@@ -25,6 +32,23 @@ import static org.testng.Assert.assertNotNull;
  * Implemented by: Anurag Singh
  */
 public class VKYC_TRIED {
+    private static ExtentReports extent;
+    private static ExtentTest test;
+
+    @BeforeClass
+    public void setupReport() {
+        ExtentSparkReporter sparkReporter = new ExtentSparkReporter("test-output/ExtentReport.html");
+        sparkReporter.config().setTheme(Theme.STANDARD);
+        sparkReporter.config().setDocumentTitle("VKYC TRIED Test Report");
+        extent = new ExtentReports();
+        extent.attachReporter(sparkReporter);
+        test = extent.createTest("VKYC_TRIED Flow Test");
+    }
+
+    @AfterClass
+    public void tearDown() {
+        extent.flush();
+    }
 
     /**
      * Tests the VKYC Tried Flow by verifying database entries and API calls.
@@ -34,16 +58,19 @@ public class VKYC_TRIED {
     public void testVkyctriedFlow() throws Exception {
         DatabaseConnection.connectToDatabases();
         Logger.logInfo("VKYC TRIED FLOW STARTED...");
+        test.log(Status.INFO, "VKYC TRIED FLOW STARTED...");
 
         String loanAppId = ConfigManager.getLoanAppID();
         assertNotNull(loanAppId, "loan_app_ID is missing in config.properties");
         Logger.logInfo("Loan App ID: " + loanAppId);
+        test.log(Status.INFO, "Loan App ID: " + loanAppId);
 
         String environment = ConfigManager.getEnvironment();
         assertNotNull(environment, "Environment is missing in config.properties");
 
         String apiUrl = "https://" + environment + ".stg.whizdm.com/loans/services/api/vkycCalling/createLeadVkycTried";
         Logger.logInfo("API URL: " + apiUrl);
+        test.log(Status.INFO, "API URL: " + apiUrl);
 
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
         LocalDateTime expectedTime = LocalDateTime.now().minusMinutes(60);
@@ -60,18 +87,21 @@ public class VKYC_TRIED {
 
             loanAppNo = getLoanAppNo(lendingConn, loanAppId);
             Logger.logInfo("Loan Application Number: " + loanAppNo);
+            test.log(Status.INFO, "Loan Application Number: " + loanAppNo);
 
             // Step 2: Update vkyc_info entry
             if (!updateVkycInfo(lendingConn, loanAppId, formattedDate)) {
                 throw new Exception("Failed to update date_modified in vkyc_info for loanAppId: " + loanAppId);
             }
             Logger.logInfo("Updated vkyc_info entry");
+            test.log(Status.INFO, "Updated vkyc_info entry");
 
             // Step 3: Fetch and validate vkyc_info entry
             if (!validateVkycInfo(lendingConn, loanAppId)) {
                 throw new Exception("vkyc_info validation failed for loanAppId: " + loanAppId);
             }
             Logger.logInfo("Validated vkyc_info entry");
+            test.log(Status.INFO, "Validated vkyc_info entry");
 
             // Step 4: Check if entry exists in calling_service_leads (Lending DB)
             if (checkExistingEntryInCallingServiceLeads(lendingConn, loanAppId)) {
@@ -95,6 +125,7 @@ public class VKYC_TRIED {
         }
 
         Logger.logInfo("VKYC TRIED FLOW COMPLETED");
+        test.log(Status.INFO, "VKYC TRIED FLOW COMPLETED");
     }
 
     private Connection establishConnection(Connection conn, String dbName) throws Exception {
@@ -112,6 +143,7 @@ public class VKYC_TRIED {
             if (rs.next()) {
                 String status = rs.getString("user_data_review_status");
                 Logger.logInfo("Application Status : " + status);
+                test.log(Status.INFO, "Application Status : " + status);
                 return status;
             }
         }
@@ -155,6 +187,7 @@ public class VKYC_TRIED {
                 String flowType = rs.getString("flow_type");
                 int attempts = rs.getInt("attempts");
                 Logger.logInfo(String.format("vkyc_info Data - status: %s, provider: %s, flow_type: %s, attempts: %d", status, provider, flowType, attempts));
+                test.log(Status.INFO, String.format("vkyc_info Data - status: %s, provider: %s, flow_type: %s, attempts: %d", status, provider, flowType, attempts));
                 return (status.equals("IN_PROGRESS") || status.equals("INITIATED") || status.equals("FAILED") || status.equals("RETRY") || status.equals("VKYC_INVALIDATED")) && "ASSISTED".equals(flowType) && attempts > 0;
             }
         }
@@ -168,6 +201,7 @@ public class VKYC_TRIED {
             if (rs.next()) {
                 String entityId = rs.getString("entity_id");
                 Logger.logInfo(String.format("Entry already exists in calling_service_leads. entity_id: %s. Skipping execution.", entityId));
+                test.log(Status.INFO, String.format("Entry already exists in calling_service_leads. entity_id: %s. Skipping execution.", entityId));
                 return true;
             }
         }
@@ -179,13 +213,16 @@ public class VKYC_TRIED {
             APIRequestContext request = playwright.request().newContext();
             APIResponse response = request.get(apiUrl + "?loanAppId=" + loanAppId);
             Logger.logInfo("API Response Status Code: " + response.status());
+            test.log(Status.INFO, "API Response Status Code: " + response.status());
             assertEquals(response.status(), 204, "API request failed");
             if (response.status() != 204) {
                 Logger.logError("Unexpected API response status: " + response.status());
+                test.log(Status.FAIL, "Unexpected API response status: " + response.status());
                 throw new RuntimeException("API request failed with status: " + response.status());
             }
         } catch (Exception e) {
             Logger.logError("Error during API call: " + e.getMessage());
+            test.log(Status.FAIL, "Error during API call: " + e.getMessage());
             throw new RuntimeException("API call failed", e);
         }
     }
@@ -199,6 +236,7 @@ public class VKYC_TRIED {
                 String campaignId = rs.getString("campaign_id");
                 String status = rs.getString("status");
                 Logger.logInfo(String.format("Entry Created in calling_service_leads - entity_id: %s, campaign_id: %s, status: %s", entityId, campaignId, status));
+                test.log(Status.INFO, String.format("Entry Created in calling_service_leads - entity_id: %s, campaign_id: %s, status: %s", entityId, campaignId, status));
                 return "VKYC_TRIED".equals(campaignId) && "ADDED".equals(status);
             }
         }
@@ -208,6 +246,7 @@ public class VKYC_TRIED {
     public boolean verifyVendorLeadDetails(Connection conn, String loanAppNo) throws Exception {
         if (loanAppNo == null || loanAppNo.isEmpty()) {
             Logger.logError("Invalid loanAppNo: " + loanAppNo);
+            test.log(Status.FAIL, "Invalid loanAppNo: " + loanAppNo);
             return false;
         }
         boolean isRecordPresent = false;
@@ -222,20 +261,25 @@ public class VKYC_TRIED {
                     String campaignId = rs.getString("campaign_id");
                     String status = rs.getString("status");
                     Logger.logInfo(String.format("Entry Created in vendor_lead_details - entity_id: %s, campaign_id: %s, status: %s", entityId, campaignId, status));
+                    test.log(Status.INFO, String.format("Entry Created in vendor_lead_details - entity_id: %s, campaign_id: %s, status: %s", entityId, campaignId, status));
                     if ("READY_TO_ADD".equals(status)) {
                         if (hitPushCreatedLeadApi(entityId)) {
                             Logger.logInfo("pushCreatedLead API called successfully. Verifying status update...");
+                            test.log(Status.INFO, "pushCreatedLead API called successfully. Verifying status update...");
                             if (verifyUpdatedStatus(conn, entityId)) {
                                 openCallingPortal();
                                 return true;
                             } else {
                                 Logger.logError("Status update verification failed.");
+                                test.log(Status.FAIL, "Status update verification failed.");
                             }
                         } else {
                             Logger.logError("pushCreatedLead API call failed.");
+                            test.log(Status.FAIL, "pushCreatedLead API call failed.");
                         }
                     } else if ("ADDED".equals(status)) {
                         Logger.logInfo("Status is already ADDED. Opening Calling Portal...");
+                        test.log(Status.INFO, "Status is already ADDED. Opening Calling Portal...");
                         openCallingPortal();
                         return true;
                     }
@@ -246,6 +290,7 @@ public class VKYC_TRIED {
                 Thread.sleep(waitTime);
             } else {
                 Logger.logError("Entry not found or not READY_TO_ADD after " + maxRetries + " retries.");
+                test.log(Status.FAIL, "Entry not found or not READY_TO_ADD after " + maxRetries + " retries.");
             }
         }
         return isRecordPresent;
@@ -259,13 +304,16 @@ public class VKYC_TRIED {
             APIResponse response = request.get(apiUrl);
             int statusCode = response.status();
             Logger.logInfo("pushCreatedLead API Response Status Code: " + statusCode);
+            test.log(Status.INFO, "pushCreatedLead API Response Status Code: " + statusCode);
             if (statusCode != 204 && statusCode != 200) {
                 Logger.logError("Unexpected API response status: " + statusCode);
+                test.log(Status.FAIL, "Unexpected API response status: " + statusCode);
                 return false;
             }
             return true;
         } catch (Exception e) {
             Logger.logError("Error calling pushCreatedLead API: " + e.getMessage());
+            test.log(Status.FAIL, "Error calling pushCreatedLead API: " + e.getMessage());
             return false;
         }
     }
@@ -277,6 +325,7 @@ public class VKYC_TRIED {
             if (rs.next()) {
                 String status = rs.getString("status");
                 Logger.logInfo("Updated Status in vendor_lead_details: " + status);
+                test.log(Status.INFO, "Updated Status in vendor_lead_details: " + status);
                 return "ADDED".equals(status);
             }
         }
@@ -286,8 +335,12 @@ public class VKYC_TRIED {
     private void openCallingPortal() {
         String portalUrl = "https://pwa-01-calling-portal-01.stg.whizdm.com/login";
         Logger.logInfo("Journey URL for Calling Portal: " + portalUrl);
+        test.log(Status.INFO, "Journey URL for Calling Portal: " + portalUrl);
         Logger.logInfo("Please login using the following credentials and continue the Calling Portal journey Manually.");
+        test.log(Status.INFO, "Please login using the following credentials and continue the Calling Portal journey Manually.");
         Logger.logInfo("Username: navaneeths");
+        test.log(Status.INFO, "Username: navaneeths");
         Logger.logInfo("Password: navaneeths");
+        test.log(Status.INFO, "Password: navaneeths");
     }
 }
