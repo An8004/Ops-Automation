@@ -14,6 +14,9 @@
           <option value="PlaywrightAutomation" />
           <option value="PlaywrightAutomation" />
           <option value="PlaywrightAutomation" />
+          <option value="PlaywrightAutomation" />
+          <option value="PlaywrightAutomation" />
+          <option value="PlaywrightAutomation" />
         </list>
       </option>
       <option name="ignoredPackages">
@@ -21,6 +24,9 @@
           <option value="junit:junit:4.10" />
           <option value="com.squareup.okio:okio:2.8.0" />
           <option value="org.jetbrains.kotlin:kotlin-stdlib:1.4.10" />
+          <option value="io.netty:netty-codec-http:4.1.96.Final" />
+          <option value="io.netty:netty-common:4.1.96.Final" />
+          <option value="org.asynchttpclient:async-http-client:2.12.3" />
         </list>
       </option>
       <option name="ignoredReasons">
@@ -28,6 +34,9 @@
           <option value="Fixed in branch" />
           <option value="Fixed in branch" />
           <option value="Fixed in branch" />
+          <option value="Not exploitable" />
+          <option value="Not exploitable" />
+          <option value="Not exploitable" />
         </list>
       </option>
     </inspection_tool>

@@ -22,6 +22,7 @@ import static org.testng.Assert.assertNotNull;
 /**
  * This class implements an automated test for the VKYC_TRIED flow, verifying database updates
  * and API interactions related to the VKYC process.
+ * Implemented by: Anurag Singh
  */
 public class VKYC_TRIED {
 
