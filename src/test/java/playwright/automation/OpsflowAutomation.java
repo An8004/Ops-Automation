@@ -67,7 +67,7 @@ public class OpsflowAutomation {
         upload_nach_doc(url, loanAppID);
     }
 
-    private void executeAutomationFlow(Playwright playwright, Browser browser, String loanAppID, String reviewStatus) throws SQLException, IOException, ClassNotFoundException, InterruptedException {
+    private void executeAutomationFlow(Playwright playwright, Browser browser, String loanAppID, String reviewStatus) throws InterruptedException {
         Logger.logInfo("Browser launched in headless mode: " + ConfigManager.isHeadless());
         BrowserContext context = browser.newContext(new Browser.NewContextOptions().setViewportSize(null));
         Page page = context.newPage();
