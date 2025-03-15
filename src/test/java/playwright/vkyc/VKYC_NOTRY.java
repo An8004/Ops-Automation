@@ -5,7 +5,8 @@ import automator.DatabaseConnection;
 import automator.Logger;
 import automator.Queries;
 import com.microsoft.playwright.*;
-import org.junit.jupiter.api.Test;
+import org.testng.annotations.Test;
+
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
