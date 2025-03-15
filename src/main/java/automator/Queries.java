@@ -24,4 +24,7 @@ public class Queries {
     public static final String VERIFY_VENDOR_LEAD_DETAILS_QUERY =
             "SELECT entity_id, campaign_id, status FROM vendor_lead_details WHERE entity_id = ? " +
                     "AND status = 'READY_TO_ADD'";
+    public static final String VERIFY_VENDOR_LEAD_STATUS_QUERY =
+"SELECT entity_id, campaign_id, status FROM vendor_lead_details WHERE entity_id = ? " +"AND status = 'ADDED'";
 }
+

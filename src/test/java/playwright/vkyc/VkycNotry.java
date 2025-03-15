@@ -75,7 +75,6 @@ public class VkycNotry {
             if (!verifyVendorLeadDetails(callingConn, loanAppNo)) {
                 throw new Exception("vendor_lead_details validation failed for loanAppNo: " + loanAppNo);
             }
-            Logger.logInfo("Verified vendor_lead_details entry");
         }
         Logger.logInfo("VKYC NOTRY FLOW COMPLETED");
     }
@@ -165,6 +164,14 @@ public class VkycNotry {
             APIResponse response = request.get(apiUrl + "?loanAppId=" + loanAppId);
             Logger.logInfo("API Response Status Code: " + response.status());
             assertEquals(204, response.status(), "API request failed");
+
+            if (response.status() != 204) {
+                Logger.logError("Unexpected API response status: " + response.status());
+                throw new RuntimeException("API request failed with status: " + response.status());
+            }
+        } catch (Exception e) {
+            Logger.logError("Error during API call: " + e.getMessage());
+            throw new RuntimeException("API call failed", e);
         }
     }
 
@@ -193,8 +200,8 @@ public class VkycNotry {
         }
 
         boolean isRecordPresent = false;
-        int maxRetries = 20;  // Maximum retries
-        int waitTime = 15000; // 15 seconds wait time
+        int maxRetries = 20;
+        int waitTime = 15000;
 
         for (int i = 0; i < maxRetries; i++) {
             try (PreparedStatement stmt = conn.prepareStatement(Queries.VERIFY_VENDOR_LEAD_DETAILS_QUERY)) {
@@ -205,19 +212,66 @@ public class VkycNotry {
                     String campaignId = rs.getString("campaign_id");
                     String status = rs.getString("status");
 
-                    Logger.logInfo(String.format("Entry Created in vendor_lead_details - entity_id: %s, campaign_id: %s, status: %s",
+                    Logger.logInfo(String.format("Entry Found in vendor_lead_details - entity_id: %s, campaign_id: %s, status: %s",
                             entityId, campaignId, status));
 
-                    isRecordPresent = (entityId != null && campaignId != null && "READY_TO_ADD".equals(status));
-                    if (isRecordPresent) {
-                        break;
+                    if ("READY_TO_ADD".equals(status)) {
+                        Logger.logInfo("Status is READY_TO_ADD. Hitting pushCreatedLead API...");
+                        if (hitPushCreatedLeadApi(entityId)) {
+                            Logger.logInfo("pushCreatedLead API called successfully. Verifying status update...");
+                            if (verifyUpdatedStatus(conn, entityId)) {
+                                return true;
+                            } else {
+                                Logger.logError("Status update verification failed.");
+                            }
+                        } else {
+                            Logger.logError("pushCreatedLead API call failed.");
+                        }
+                    } else if ("ADDED".equals(status)) {
+                        Logger.logInfo("Status is already ADDED.");
+                        return true;
                     }
+                    isRecordPresent = true;
                 }
             }
-            Logger.logError("Entry not found in vendor_lead_details. Retrying in " + (waitTime / 1000) + " seconds...");
+            Logger.logError("Entry not found or not READY_TO_ADD. Retrying in " + (waitTime / 1000) + " seconds...");
             Thread.sleep(waitTime);
         }
-
         return isRecordPresent;
+    }
+
+    private boolean hitPushCreatedLeadApi(String entityId) {
+        String callingEnvironment = ConfigManager.getProperty("calling_environment");
+        String apiUrl = "https://" + callingEnvironment + ".stg.whizdm.com/callingInfra/v1/cron/ameyo/pushCreatedLead?entityId=" + entityId;
+
+        try (Playwright playwright = Playwright.create()) {
+            APIRequestContext request = playwright.request().newContext();
+            APIResponse response = request.get(apiUrl);
+
+            int statusCode = response.status();
+            Logger.logInfo("pushCreatedLead API Response Status Code: " + statusCode);
+        
+            if (statusCode != 204 && statusCode != 200) {
+                Logger.logError("Unexpected API response status: " + statusCode);
+                return false;
+            }
+            return true;
+        } catch (Exception e) {
+            Logger.logError("Error calling pushCreatedLead API: " + e.getMessage());
+            return false;
+        }
+    }
+
+    private boolean verifyUpdatedStatus(Connection conn, String entityId) throws Exception {
+        try (PreparedStatement stmt = conn.prepareStatement(Queries.VERIFY_VENDOR_LEAD_STATUS_QUERY)) {
+            stmt.setString(1, entityId);
+            ResultSet rs = stmt.executeQuery();
+            if (rs.next()) {
+                String status = rs.getString("status");
+                Logger.logInfo("Updated Status in vendor_lead_details: " + status);
+                return "ADDED".equals(status);
+            }
+        }
+        return false;
     }
 }
