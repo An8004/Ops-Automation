@@ -47,8 +47,7 @@ public class VkycNotry {
         String loanAppNo;
 
         // **Step 1-7: Lending DB Operations**
-        try (Connection lendingConn = DatabaseConnection.getLendingDBConnection()) {
-            assertNotNull(lendingConn, "Failed to establish connection to Lending DB");
+        try (Connection lendingConn = establishConnection(DatabaseConnection.getLendingDBConnection(), "Lending DB")) {
 
             // Step 1: Verify application status
             if (!"REQ_CREDIT_CHECK".equals(validateApplicationStatus(lendingConn, loanAppId))) {
@@ -84,13 +83,17 @@ public class VkycNotry {
         }
 
         // **Step 7: Vendor Lead Details Verification in Calling DB**
-        try (Connection callingConn = DatabaseConnection.getCallingDBConnection()) {
-            assertNotNull(callingConn, "Failed to establish connection to Calling DB");
+        try (Connection callingConn = establishConnection(DatabaseConnection.getCallingDBConnection(), "Calling DB")) {
             if (!verifyVendorLeadDetails(callingConn, loanAppNo)) {
                 throw new Exception("vendor_lead_details validation failed for loanAppNo: " + loanAppNo);
             }
         }
         Logger.logInfo("VKYC NOTRY FLOW COMPLETED");
+    }
+
+    private Connection establishConnection(Connection conn, String dbName) throws Exception {
+        assertNotNull(conn, "Failed to establish connection to " + dbName);
+        return conn;
     }
 
     /**
