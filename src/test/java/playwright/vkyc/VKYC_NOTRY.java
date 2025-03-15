@@ -28,7 +28,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * Implemented by: Anurag Singh
  */
 
-public class VkycNotry {
+public class VKYC_NOTRY{
 
     @Test
     public void testVkycNotryFlow() throws Exception {
