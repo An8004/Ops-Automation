@@ -4,16 +4,29 @@ import automator.ConfigManager;
 import automator.DatabaseConnection;
 import automator.Logger;
 import automator.Queries;
-import com.microsoft.playwright.APIRequestContext;
-import com.microsoft.playwright.APIResponse;
-import com.microsoft.playwright.Playwright;
+import com.microsoft.playwright.*;
 import org.junit.jupiter.api.Test;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+
 import static org.junit.jupiter.api.Assertions.*;
+
+/**
+ * VKYC No Try Flow Automation Test
+ * This class automates the VKYC No Try Flow process, performing database validation,
+ * API calls, and browser automation using Playwright.
+ * Validating loan application status.
+ * Updating VKYC information in the Lending DB.
+ * Checking and validating VKYC info.
+ * Making an API call if conditions are met.
+ * Verifying entries in calling_service_leads.
+ * Verifying vendor lead details in the Calling DB.
+ * @throws Exception if any validation or API call fails.
+ * Implemented by: Anurag Singh
+ */
 
 public class VkycNotry {
 
@@ -55,6 +68,7 @@ public class VkycNotry {
                 throw new Exception("vkyc_info validation failed for loanAppId: " + loanAppId);
             }
             Logger.logInfo("Validated vkyc_info entry");
+
             // Step 4: Check if entry exists in calling_service_leads (Lending DB)
             if (checkExistingEntryInCallingServiceLeads(lendingConn, loanAppId)) {
                 return;
@@ -79,6 +93,14 @@ public class VkycNotry {
         Logger.logInfo("VKYC NOTRY FLOW COMPLETED");
     }
 
+    /**
+     * Validates the application status by querying the database.
+     *
+     * @param conn      Database connection object.
+     * @param loanAppId Loan application ID.
+     * @return Application status as a string.
+     * @throws Exception if any error occurs during the database query.
+     */
     private String validateApplicationStatus(Connection conn, String loanAppId) throws Exception {
         if (isValidLoanAppId(loanAppId)) {
             throw new IllegalArgumentException("Invalid loan application ID format");
@@ -88,7 +110,6 @@ public class VkycNotry {
             ResultSet rs = stmt.executeQuery();
             if (rs.next()) {
                 String status = rs.getString("user_data_review_status");
-                //Logger.logInfo(String.format("Application status for LoanAppID %s: %s", loanAppId, status));
                 Logger.logInfo("Application Status : " + status);
                 return status;
             }
@@ -96,10 +117,24 @@ public class VkycNotry {
         return null;
     }
 
+    /**
+     * Checks if the loan application ID is valid.
+     *
+     * @param loanAppId Loan application ID.
+     * @return true if the ID is valid, false otherwise.
+     */
     private boolean isValidLoanAppId(String loanAppId) {
         return loanAppId == null || !loanAppId.matches("[A-Za-z0-9_-]+");
     }
 
+    /**
+     * Retrieves the loan application number from the database.
+     *
+     * @param conn      Database connection object.
+     * @param loanAppId Loan application ID.
+     * @return Loan application number as a string.
+     * @throws Exception if any error occurs during the database query.
+     */
     private String getLoanAppNo(Connection conn, String loanAppId) throws Exception {
         if (isValidLoanAppId(loanAppId)) {
             throw new IllegalArgumentException("Invalid loan application ID format");
@@ -114,6 +149,15 @@ public class VkycNotry {
         return null;
     }
 
+    /**
+     * Updates VKYC information in the database.
+     *
+     * @param conn          Database connection object.
+     * @param loanAppId     Loan application ID.
+     * @param formattedDate Formatted date string.
+     * @return true if the update was successful, false otherwise.
+     * @throws Exception if any error occurs during the database update.
+     */
     private boolean updateVkycInfo(Connection conn, String loanAppId, String formattedDate) throws Exception {
         try (PreparedStatement stmt = conn.prepareStatement(Queries.UPDATE_VKYC_INFO_QUERY)) {
             stmt.setString(1, formattedDate);
@@ -123,6 +167,14 @@ public class VkycNotry {
         }
     }
 
+    /**
+     * Validates VKYC information by querying the database.
+     *
+     * @param conn      Database connection object.
+     * @param loanAppId Loan application ID.
+     * @return true if the VKYC information is valid, false otherwise.
+     * @throws Exception if any error occurs during the database query.
+     */
     private boolean validateVkycInfo(Connection conn, String loanAppId) throws Exception {
         try (PreparedStatement stmt = conn.prepareStatement(Queries.FETCH_VKYC_INFO_QUERY)) {
             stmt.setString(1, loanAppId);
@@ -145,6 +197,14 @@ public class VkycNotry {
         return false;
     }
 
+    /**
+     * Checks for existing entries in the calling_service_leads table.
+     *
+     * @param conn      Database connection object.
+     * @param loanAppId Loan application ID.
+     * @return true if an entry exists, false otherwise.
+     * @throws Exception if any error occurs during the database query.
+     */
     private boolean checkExistingEntryInCallingServiceLeads(Connection conn, String loanAppId) throws Exception {
         try (PreparedStatement stmt = conn.prepareStatement(Queries.CHECK_CALLING_SERVICE_LEADS_QUERY)) {
             stmt.setString(1, loanAppId);
@@ -158,6 +218,12 @@ public class VkycNotry {
         return false;
     }
 
+    /**
+     * Makes an API call to the VKYC service.
+     *
+     * @param apiUrl    API URL.
+     * @param loanAppId Loan application ID.
+     */
     private void hitVkycApi(String apiUrl, String loanAppId) {
         try (Playwright playwright = Playwright.create()) {
             APIRequestContext request = playwright.request().newContext();
@@ -175,6 +241,14 @@ public class VkycNotry {
         }
     }
 
+    /**
+     * Verifies the entry in the calling_service_leads table.
+     *
+     * @param conn      Database connection object.
+     * @param loanAppId Loan application ID.
+     * @return true if the entry is verified, false otherwise.
+     * @throws Exception if any error occurs during the database query.
+     */
     private boolean verifyCallingServiceLeadsEntry(Connection conn, String loanAppId) throws Exception {
         try (PreparedStatement stmt = conn.prepareStatement(Queries.VERIFY_CALLING_SERVICE_LEADS_QUERY)) {
             stmt.setString(1, loanAppId);
@@ -193,7 +267,15 @@ public class VkycNotry {
         return false;
     }
 
-    private boolean verifyVendorLeadDetails(Connection conn, String loanAppNo) throws Exception {
+    /**
+     * Verifies the vendor lead details by querying the database.
+     *
+     * @param conn      Database connection object.
+     * @param loanAppNo Loan application number.
+     * @return true if the vendor lead details are verified, false otherwise.
+     * @throws Exception if any error occurs during the database query.
+     */
+    public boolean verifyVendorLeadDetails(Connection conn, String loanAppNo) throws Exception {
         if (loanAppNo == null || loanAppNo.isEmpty()) {
             Logger.logError("Invalid loanAppNo: " + loanAppNo);
             return false;
@@ -212,14 +294,14 @@ public class VkycNotry {
                     String campaignId = rs.getString("campaign_id");
                     String status = rs.getString("status");
 
-                    Logger.logInfo(String.format("Entry Found in vendor_lead_details - entity_id: %s, campaign_id: %s, status: %s",
+                    Logger.logInfo(String.format("Entry Created in vendor_lead_details - entity_id: %s, campaign_id: %s, status: %s",
                             entityId, campaignId, status));
 
                     if ("READY_TO_ADD".equals(status)) {
-                        Logger.logInfo("Status is READY_TO_ADD. Hitting pushCreatedLead API...");
                         if (hitPushCreatedLeadApi(entityId)) {
                             Logger.logInfo("pushCreatedLead API called successfully. Verifying status update...");
                             if (verifyUpdatedStatus(conn, entityId)) {
+                                openCallingPortal();
                                 return true;
                             } else {
                                 Logger.logError("Status update verification failed.");
@@ -228,18 +310,28 @@ public class VkycNotry {
                             Logger.logError("pushCreatedLead API call failed.");
                         }
                     } else if ("ADDED".equals(status)) {
-                        Logger.logInfo("Status is already ADDED.");
+                        Logger.logInfo("Status is already ADDED. Opening Calling Portal...");
+                        openCallingPortal();
                         return true;
                     }
                     isRecordPresent = true;
                 }
             }
-            Logger.logError("Entry not found or not READY_TO_ADD. Retrying in " + (waitTime / 1000) + " seconds...");
-            Thread.sleep(waitTime);
+            if (i < maxRetries - 1) {
+                Thread.sleep(waitTime);
+            } else {
+                Logger.logError("Entry not found or not READY_TO_ADD after " + maxRetries + " retries.");
+            }
         }
         return isRecordPresent;
     }
 
+    /**
+     * Makes an API call to push created lead.
+     *
+     * @param entityId Entity ID.
+     * @return true if the API call was successful, false otherwise.
+     */
     private boolean hitPushCreatedLeadApi(String entityId) {
         String callingEnvironment = ConfigManager.getProperty("calling_environment");
         String apiUrl = "https://" + callingEnvironment + ".stg.whizdm.com/callingInfra/v1/cron/ameyo/pushCreatedLead?entityId=" + entityId;
@@ -250,7 +342,7 @@ public class VkycNotry {
 
             int statusCode = response.status();
             Logger.logInfo("pushCreatedLead API Response Status Code: " + statusCode);
-        
+
             if (statusCode != 204 && statusCode != 200) {
                 Logger.logError("Unexpected API response status: " + statusCode);
                 return false;
@@ -262,6 +354,13 @@ public class VkycNotry {
         }
     }
 
+    /**
+     * Verifies the updated status in the vendor_lead_details table.
+     * @param conn     Database connection object.
+     * @param entityId Entity ID.
+     * @return true if the status is updated to "ADDED", false otherwise.
+     * @throws Exception if any error occurs during the database query.
+     */
     private boolean verifyUpdatedStatus(Connection conn, String entityId) throws Exception {
         try (PreparedStatement stmt = conn.prepareStatement(Queries.VERIFY_VENDOR_LEAD_STATUS_QUERY)) {
             stmt.setString(1, entityId);
@@ -273,5 +372,16 @@ public class VkycNotry {
             }
         }
         return false;
+    }
+
+    /**
+     * Opens the calling portal in a browser.
+     */
+    private void openCallingPortal() {
+        String portalUrl = "https://pwa-01-calling-portal-01.stg.whizdm.com/login";
+        Logger.logInfo("Journey URL for Calling Portal: " + portalUrl);
+        Logger.logInfo("Please login using the following credentials and continue the Calling Portal journey Manually.");
+        Logger.logInfo("Username: navaneeths");
+        Logger.logInfo("Password: navaneeths");
     }
 }
