@@ -188,8 +188,7 @@ public class VKYC_NOTRY {
                 String provider = rs.getString("provider");
                 String flowType = rs.getString("flow_type");
                 int attempts = rs.getInt("attempts");
-                Logger.logInfo(String.format("vkyc_info Data - status: %s, provider: %s, flow_type: %s, attempts: %d", status, provider, flowType, attempts));
-                test.log(Status.INFO, String.format("vkyc_info Data - status: %s, provider: %s, flow_type: %s, attempts: %d", status, provider, flowType, attempts));
+                logVkycInfoData(status, provider, flowType, attempts);
                 return (status.equals("STARTED") || status.equals("INITIATED") || status.equals("VKYC_INVALIDATED")) && ("IN_HOUSE".equals(provider) || "HYPERVERGE".equals(provider)) && "ASSISTED".equals(flowType) && attempts == 0;
             }
         }
@@ -262,8 +261,7 @@ public class VKYC_NOTRY {
                     String entityId = rs.getString("entity_id");
                     String campaignId = rs.getString("campaign_id");
                     String status = rs.getString("status");
-                    Logger.logInfo(String.format("Entry Created in vendor_lead_details - entity_id: %s, campaign_id: %s, status: %s", entityId, campaignId, status));
-                    test.log(Status.INFO, String.format("Entry Created in vendor_lead_details - entity_id: %s, campaign_id: %s, status: %s", entityId, campaignId, status));
+                    logVendorLeadDetails(entityId, campaignId, status);
                     if ("READY_TO_ADD".equals(status)) {
                         if (hitPushCreatedLeadApi(entityId)) {
                             Logger.logInfo("pushCreatedLead API called successfully. Verifying status update...");
@@ -344,5 +342,17 @@ public class VKYC_NOTRY {
         test.log(Status.INFO, "Username: navaneeths");
         Logger.logInfo("Password: navaneeths");
         test.log(Status.INFO, "Password: navaneeths");
+    }
+
+    private void logVkycInfoData(String status, String provider, String flowType, int attempts) {
+        String logMessage = String.format("vkyc_info Data - status: %s, provider: %s, flow_type: %s, attempts: %d", status, provider, flowType, attempts);
+        Logger.logInfo(logMessage);
+        test.log(Status.INFO, logMessage);
+    }
+
+    private void logVendorLeadDetails(String entityId, String campaignId, String status) {
+        String logMessage = String.format("Entry Created in vendor_lead_details - entity_id: %s, campaign_id: %s, status: %s", entityId, campaignId, status);
+        Logger.logInfo(logMessage);
+        test.log(Status.INFO, logMessage);
     }
 }

@@ -186,8 +186,7 @@ public class VKYC_TRIED {
                 String provider = rs.getString("provider");
                 String flowType = rs.getString("flow_type");
                 int attempts = rs.getInt("attempts");
-                Logger.logInfo(String.format("vkyc_info Data - status: %s, provider: %s, flow_type: %s, attempts: %d", status, provider, flowType, attempts));
-                test.log(Status.INFO, String.format("vkyc_info Data - status: %s, provider: %s, flow_type: %s, attempts: %d", status, provider, flowType, attempts));
+                logVkycInfoData(status, provider, flowType, attempts);
                 return (status.equals("IN_PROGRESS") || status.equals("INITIATED") || status.equals("FAILED") || status.equals("RETRY") || status.equals("VKYC_INVALIDATED")) && "ASSISTED".equals(flowType) && attempts > 0;
             }
         }
@@ -342,5 +341,11 @@ public class VKYC_TRIED {
         test.log(Status.INFO, "Username: navaneeths");
         Logger.logInfo("Password: navaneeths");
         test.log(Status.INFO, "Password: navaneeths");
+    }
+
+    private void logVkycInfoData(String status, String provider, String flowType, int attempts) {
+        String logMessage = String.format("vkyc_info Data - status: %s, provider: %s, flow_type: %s, attempts: %d", status, provider, flowType, attempts);
+        Logger.logInfo(logMessage);
+        test.log(Status.INFO, logMessage);
     }
 }
